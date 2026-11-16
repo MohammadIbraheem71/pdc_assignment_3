@@ -304,3 +304,173 @@ work/span model. Part 1 (`saxpy/`) is finished and must not be changed.
    by the staged demonstration and is what was measured here.
 4. Part 3 (renderer) is still untouched; `make check` will keep failing until it is done.
 
+---
+
+# Part 3: Correct Parallel Circle Rendering
+
+## Goal
+
+Implement `render_parallel()` in `render/renderer.cpp` so that it matches
+`render_reference()` within the supplied tolerance on every scene, while assigning
+disjoint pixels/rows to OpenMP workers and applying the circles to each pixel in their
+original input order. Keep the implementation simple and correct: this is the Part 4
+baseline, so no culling or bounding boxes here. Add edge-case and determinism tests,
+produce example images, do a light timing sanity check, and write `part3_notes.md`
+with the ordered-blending calculation, the lost-update race interleaving, the
+decomposition discussion, and the 1024x1024 load calculation. Do not modify `saxpy/`,
+`scan/`, the serial reference, signatures, or the supplied comparison code.
+
+## Checklist
+
+- [x] Read `README.md`, `Makefile`, `render/renderer.h`, `render/renderer.cpp`, `render/scenes.cpp`, `render/scenes.h`, `render/main.cpp`, `render/bench.cpp`, and the image comparison code
+- [x] Implement `render_parallel()` (row-parallel, original circle order per pixel, one write per pixel, `schedule(runtime)`)
+- [x] Build and run `./render_demo` for the supplied scenes; record PASS/FAIL
+- [x] Add a separate edge-case + determinism test file and save its output to a text file
+- [x] Write the exact scene-generation/example-image commands and save example images in a clearly named folder
+- [x] Light timing sanity check: serial vs parallel at 1/2/4/8, warm-up + >=5 runs, median, `omp_get_wtime`, save to a text file
+- [x] Record machine info (already in Parts 1 and 2; confirm it still applies)
+- [x] Verify ordered-blending calculations with a small program and save its output
+- [x] Measure per-thread work on a clustered 1024x1024 scene (probe) to support the load-imbalance discussion
+- [x] Write `part3_notes.md` (blending math, race table, decomposition, load calculation, measured vs assumed)
+- [x] Write `README_part3.md` with exact compile/test/run commands
+- [ ] Preserve the Part 3 baseline for Part 4 (git tag/commit + note in code/plan)
+- [ ] Run `make clean`, remove extra binaries, keep only the report images in their folder
+- [ ] Final summary (files, tests, blending results, allocation numbers, timing table, manual follow-ups)
+
+## Findings from reading the starter
+
+- `render/renderer.h`: `Circle` is seven floats (`x, y, r, red, green, blue, alpha`) in
+  normalized [0,1] coordinates; `Pixel` is `float r,g,b`; `Image` is
+  `{int width,height; std::vector<Pixel> pixels}` stored row by row, so pixel (x,y) is
+  `pixels[y*width + x]`. `images_close(a,b,tolerance=0.0001f)` requires equal dimensions
+  and every component difference `<= tolerance` on all channels.
+- `render/renderer.cpp`: the reference starts from an all-white image
+  (`Pixel{1,1,1}`), then for each circle in input order visits every pixel and calls
+  `blend` when `covers` is true. `blend` computes
+  `p.r = alpha*red + (1-alpha)*p.r` (same for g and b) with `float` arithmetic.
+  `covers` computes the pixel center as `px=(x+0.5f)/w, py=(y+0.5f)/h`, then
+  `dx=px-c.x, dy=py-c.y` and returns `dx*dx + dy*dy <= c.r*c.r`. The boundary is
+  included (`<=`), and all types are `float`; the parallel version must reuse these
+  exact helpers/expressions.
+- `render/main.cpp`: `./render_demo [size] [scene] [variant]` renders the reference and
+  the chosen variant, writes `render_<scene>_reference.ppm` and
+  `render_<scene>_<variant>.ppm` into the current directory (even when the comparison
+  fails), prints `serial_ms`, `parallel_ms`, and `correctness=PASS|FAIL`, and exits 1 on
+  failure. Size is limited to 1..4096.
+- `render/bench.cpp`: measures the serial reference, `render_parallel` ("baseline") and
+  `render_optimized` at 1/2/4/8 threads, validating every parallel image before timing.
+  It uses the shared `common/timing.h` (`median_ms`, `omp_get_wtime` is not used there but
+  `steady_clock` is). It does not write images, so nothing is timed with I/O. While
+  `render_optimized` is a stub, the benchmark reports a FAIL and exits 1, so Part 3 needs
+  its own timing program.
+- `render/scenes.cpp`: deterministic fixed-seed scenes: `dense` (40 circles on a grid,
+  alpha 0.35), `sparse` (300 tiny circles, seed 1001), `overlap` (150 large low-opacity
+  circles near the middle, seed 2002), `clustered` (500 small circles in two hot spots,
+  seed 3003). The scene names/order are fixed by `scenes.h`.
+- `Makefile`: builds `render_demo` from `render/main.cpp render/renderer.cpp
+  render/scenes.cpp` and `render_bench` from `render/bench.cpp` plus the same files, with
+  `-O2 -std=c++17 -Wall -Wextra -fopenmp`. `make clean` removes all six binaries and
+  `render_*.ppm` in the repository root. The Makefile has no wildcard rules, so extra
+  Part 3 programs will be compiled by scripts and the Makefile will not be changed.
+- Machine (from Parts 1 and 2): Intel Xeon E5-2650 v3 @ 2.30 GHz, 10 physical cores /
+  20 logical CPUs, 25 MiB L3, 6.9 GiB RAM, Ubuntu 26.04.1 LTS (kernel
+  7.0.0-43-generic), g++ 15.2.0, libgomp 16, `_OPENMP = 201511` (OpenMP 4.5), runtime
+  advertises OpenMP 5.1. 8 threads are supported; the machine is shared/loaded.
+
+## Decisions
+
+- Decompose by **rows**: `#pragma omp parallel for schedule(runtime)` over `y`, with the
+  inner `x` loop and the circle loop inside. Every pixel is written by exactly one
+  iteration, rows are independent, and `schedule(runtime)` lets Part 4 use
+  `OMP_SCHEDULE` experiments. Static assignment of rows is the default schedule.
+- Keep the pixel color in a local `Pixel` during the circle loop (`p = {1,1,1}`), apply
+  the circles in input order 0..N-1 with the existing `covers()` and `blend()` helpers,
+  then write `image.pixels[y*width + x] = p` once. No circle is reordered, no atomics, no
+  locks. Reusing the reference helpers guarantees identical pixel-center, float, and
+  `<=` boundary semantics.
+- Do not call `render_reference` and do not set the thread count inside the function. The
+  initial image is constructed all-white exactly like the reference; no I/O happens in
+  the renderer.
+- The simple row loop is the baseline for Part 4. `render_parallel` will not be modified
+  in Part 4; a git tag (`part3-baseline`) plus a comment above the function will mark it
+  so the optimized version can be compared against it.
+- Extra files live under `render/` and are built by scripts: edge/determinism tests,
+  a timing-sanity program, a per-thread work probe, and an example-image script. The
+  supplied tests, scenes, reference, and comparison remain untouched.
+- Example images go into `part3_images/` (a clearly named folder), with a deterministic
+  script that renders the same fixed-seed scenes every time. `make clean` only removes
+  `render_*.ppm` in the repository root, so the report folder is unaffected.
+- Timing sanity check: one fixed scene, serial reference vs `render_parallel` at 1/2/4/8
+  threads, one warm-up + at least 5 timed runs, median, `omp_get_wtime()`, no I/O in the
+  timed region. Full benchmarking and schedule experiments belong to Part 4.
+- `part3_notes.md` will keep measured numbers and derived arithmetic clearly separate
+  from reasoning/assumptions, and the per-thread imbalance claim will be supported by a
+  measured probe if it is cheap enough to run.
+
+## Findings / Results
+
+- Implementation: `render_parallel()` decomposes by rows
+  (`#pragma omp parallel for schedule(runtime)`, y outer, x inner, circles inner-most in
+  original order). Each pixel keeps a local `Pixel p{1,1,1}`, calls the existing
+  `covers()`/`blend()` in order, and writes `image.pixels[y*width+x]` once. No atomics,
+  no locks, no circle reordering, no thread-count changes, no I/O.
+- Build: `make render_demo` succeeds with no warnings.
+- Demo: all four supplied scenes (`dense`, `sparse`, `overlap`, `clustered`) at 256x256
+  and `OMP_NUM_THREADS` = 1, 2, 4, 8 report `correctness=PASS` (16/16 runs). Single-run
+  diagnostics were 9–105 ms serial and 2.5–60 ms parallel, so the timing check below
+  uses medians.
+- Edge/determinism tests: `render/edge_tests.cpp` (run by `render/run_tests.sh`) covers
+  zero circles, 0x0 and 0x7 images, non-square images, single circles (centre/corner/
+  edge), mostly-empty scenes, overlapping A-then-B and B-then-A, partly and fully
+  outside circles, 64 concentric circles with different colors/opacities, and a mixed
+  120-circle random scene. All **56 checks pass** at 1/2/4/8 threads; every result is
+  both within `images_close` (1e-4) and **bit-exact** against the reference, and four
+  re-renders per case are identical. Output: `part3_tests.log`.
+- Timing sanity (`render/timing_sanity.cpp`, `render/run_timing.sh`): 512x512 clustered
+  scene, 500 circles, 7 timed runs + 1 warm-up, median with `omp_get_wtime()`, no I/O.
+  Serial reference 333.5046 ms; parallel 189.2990 / 100.9235 / 54.8234 / 28.2888 ms at
+  p = 1/2/4/8. `Sp = T1/Tp` = 1 / 1.876 / 3.453 / 6.692, efficiency
+  1 / 0.938 / 0.863 / 0.837, `vs_serial` = 1.762 / 3.305 / 6.083 / 11.789. Output:
+  `part3_timing.txt`. A repeat run in the same session gave 323.7280 ms serial and
+  187.1182 / 96.5131 / 52.3922 / 28.3514 ms parallel (`Sp` = 1 / 1.939 / 3.571 / 6.600),
+  so the shape is stable.
+  - The parallel function at **1 thread is 1.76x faster than the serial reference**:
+    both do the same per-pixel coverage tests and blends in the same order, but the
+    reference does a load+store of the image pixel for every covered circle, while the
+    baseline keeps the pixel in a local variable and writes once. The scaling numbers are
+    therefore reported both against T1 (parallel at 1 thread) and against the serial
+    reference.
+- Ordered blending check (`render/blend_check.cpp`, `render/run_blend.sh`): A then B gives
+  (0.500000, 0.250000, 0.750000), B then A gives (0.750000, 0.250000, 0.500000); the same
+  values come out of both `render_reference` and `render_parallel` at the centre pixel
+  of a 100x100 image. Blending is not commutative. Output: `part3_blend.txt`.
+- Load probe (`render/load_probe.cpp`, `render/run_load.sh`): 1024x1024 clustered, 500
+  circles, 21.4% pixels covered, 1,077,826 blends. At 8 threads each thread gets exactly
+  128 rows / 131,072 pixels, but blend counts range from 17,955 to 363,211 (**20.2x**);
+  measured per-thread loop times range from 146.150 to 164.587 ms (**1.13x**). At 4
+  threads (256 rows each) blend counts range from 62,447 to 383,214 (6.1x) and loop times
+  from 285.523 to 306.701 ms (1.07x). So blend work is very uneven, but the baseline's
+  time is dominated by the uniform 500-circle test per pixel (524,288,000 tests), of
+  which only 0.21% lead to a blend. Output: `part3_load.txt`.
+- Example images: `render/run_examples.sh` renders the fixed-seed `dense` and `clustered`
+  scenes at 512x512 and writes reference/parallel PNGs (converted losslessly from the
+  starter's text PPM) into `part3_images/`:
+  `dense_512_{reference,parallel}.png` and `clustered_512_{reference,parallel}.png`.
+  Each reference/parallel pair has identical bytes, as expected from the bit-exact tests.
+
+- `part3_notes.md` written: implementation, verification summary, measured timing and
+  load tables, ordered-blending working, lost-update race interleaving (including the
+  finer mixed-channel case), circle- vs pixel-parallel discussion with lock/false-sharing
+  reasoning, 1024x1024 load calculation, and a separate measured-vs-assumed section.
+- `README_part3.md` written with exact compile, demo, test, blend, timing, load, example,
+  and cleanup commands, plus the Part 4 baseline note.
+
+## Next steps
+
+1. Tag the Part 3 baseline (`part3-baseline`) and commit the Part 3 work.
+2. Re-run the final demo and edge tests from the committed tree.
+3. `make clean`, remove `render/.part3_build` and the leftover root PPMs, verify that only
+   report artifacts (`part3_*` files, `part3_images/`, `part3_notes.md`,
+   `README_part3.md`) remain.
+4. Produce the final summary for the user.
+

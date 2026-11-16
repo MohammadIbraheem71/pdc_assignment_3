@@ -35,16 +35,21 @@ Image render_reference(int width,int height,const std::vector<Circle>& circles) 
     return image;
 }
 
-// Part 3. Your implementation goes here. You may add helper functions above it.
+// Part 3. Parallel baseline, kept unchanged for the Part 4 comparison.
+// Rows are independent, so each worker owns a disjoint set of pixels. Inside a
+// pixel the circles are applied in their original input order, which is
+// required because alpha blending is not commutative.
 Image render_parallel(int width,int height,const std::vector<Circle>& circles) {
     Image image{width,height,std::vector<Pixel>(width*height,Pixel{1,1,1})};
-    // TODO: assign independent pixels or tiles to OpenMP workers. For every
-    // pixel, apply the circles in their original input order using covers()
-    // and blend(). Two workers must never write the same pixel.
-    // Do not call render_reference here and do not set the thread count in
-    // this function. Consider writing the main loop with schedule(runtime) so
-    // that OMP_SCHEDULE can change the schedule in the Part 4 experiments.
-    (void)circles;
+    #pragma omp parallel for schedule(runtime)
+    for (int y=0;y<height;++y) {
+        for (int x=0;x<width;++x) {
+            Pixel p{1,1,1};
+            for (const Circle& c : circles)
+                if(covers(c,x,y,width,height)) blend(p,c);
+            image.pixels[static_cast<std::size_t>(y)*width+x]=p;
+        }
+    }
     return image;
 }
 

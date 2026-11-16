@@ -1,0 +1,12 @@
+# part 3 timing sanity check
+# compiler 15.2.0, _OPENMP 201511, processors 20
+# scene clustered, 500 circles, 512x512, 7 timed runs after one warm-up
+# median of omp_get_wtime samples, no I/O in timed regions
+# T1 = render_parallel on 1 thread; speedup = T1/Tp; vs_serial = serial/median
+
+variant    threads    median_ms   speedup  vs_serial
+serial           1     333.5046       n/a      1.000
+parallel         1     189.2990     1.000      1.762
+parallel         2     100.9235     1.876      3.305
+parallel         4      54.8234     3.453      6.083
+parallel         8      28.2888     6.692     11.789
