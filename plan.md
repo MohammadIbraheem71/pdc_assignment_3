@@ -333,9 +333,9 @@ decomposition discussion, and the 1024x1024 load calculation. Do not modify `sax
 - [x] Measure per-thread work on a clustered 1024x1024 scene (probe) to support the load-imbalance discussion
 - [x] Write `part3_notes.md` (blending math, race table, decomposition, load calculation, measured vs assumed)
 - [x] Write `README_part3.md` with exact compile/test/run commands
-- [ ] Preserve the Part 3 baseline for Part 4 (git tag/commit + note in code/plan)
-- [ ] Run `make clean`, remove extra binaries, keep only the report images in their folder
-- [ ] Final summary (files, tests, blending results, allocation numbers, timing table, manual follow-ups)
+- [x] Preserve the Part 3 baseline for Part 4 (git tag/commit + note in code/plan)
+- [x] Run `make clean`, remove extra binaries, keep only the report images in their folder
+- [x] Final summary (files, tests, blending results, allocation numbers, timing table, manual follow-ups)
 
 ## Findings from reading the starter
 
@@ -464,13 +464,23 @@ decomposition discussion, and the 1024x1024 load calculation. Do not modify `sax
   reasoning, 1024x1024 load calculation, and a separate measured-vs-assumed section.
 - `README_part3.md` written with exact compile, demo, test, blend, timing, load, example,
   and cleanup commands, plus the Part 4 baseline note.
+- Final verification: after the Part 3 commit, `make render_demo` and all four scenes at
+  384x384 reported `correctness=PASS` at 1 and 8 threads (8/8 runs), and
+  `./render/run_tests.sh` again reported `56 checks, 0 failed -> PASS`.
+- Baseline preserved: Part 3 is committed and tagged `part3-baseline`; `render_parallel()`
+  carries a comment that it is the frozen baseline, and Part 4 should only implement
+  `render_optimized()`.
+- Cleanup: `make clean` removed the six binaries and all `render_*.ppm` files;
+  `rm -rf render/.part3_build` removed the extra test/benchmark binaries. Root contains no
+  executables or PPMs. Kept for the report: `part3_images/` (4 PNGs), `part3_tests.log`,
+  `part3_timing.txt`, `part3_load.txt`, `part3_blend.txt`, `part3_notes.md`,
+  `README_part3.md`. Delete `part3_images/` before zipping the submission.
 
 ## Next steps
 
-1. Tag the Part 3 baseline (`part3-baseline`) and commit the Part 3 work.
-2. Re-run the final demo and edge tests from the committed tree.
-3. `make clean`, remove `render/.part3_build` and the leftover root PPMs, verify that only
+1. Re-run the final demo and edge tests from the committed tree.
+2. `make clean`, remove `render/.part3_build` and the leftover root PPMs, verify that only
    report artifacts (`part3_*` files, `part3_images/`, `part3_notes.md`,
    `README_part3.md`) remain.
-4. Produce the final summary for the user.
+3. Produce the final summary for the user.
 
