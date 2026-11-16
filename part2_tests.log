@@ -1,0 +1,89 @@
+SCAN Part 2 edge-case tests
+processors available: 20, thread counts tested: 1,2,4,8
+
+required length 0          n=0         p=1  scan=PASS repeats=PASS inputs=PASS PASS
+required length 0          n=0         p=2  scan=PASS repeats=PASS inputs=PASS PASS
+required length 0          n=0         p=4  scan=PASS repeats=PASS inputs=PASS PASS
+required length 0          n=0         p=8  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1          n=1         p=1  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1          n=1         p=2  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1          n=1         p=4  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1          n=1         p=8  scan=PASS repeats=PASS inputs=PASS PASS
+required length 7          n=7         p=1  scan=PASS repeats=PASS inputs=PASS PASS
+required length 7          n=7         p=2  scan=PASS repeats=PASS inputs=PASS PASS
+required length 7          n=7         p=4  scan=PASS repeats=PASS inputs=PASS PASS
+required length 7          n=7         p=8  scan=PASS repeats=PASS inputs=PASS PASS
+required length 8          n=8         p=1  scan=PASS repeats=PASS inputs=PASS PASS
+required length 8          n=8         p=2  scan=PASS repeats=PASS inputs=PASS PASS
+required length 8          n=8         p=4  scan=PASS repeats=PASS inputs=PASS PASS
+required length 8          n=8         p=8  scan=PASS repeats=PASS inputs=PASS PASS
+required length 9          n=9         p=1  scan=PASS repeats=PASS inputs=PASS PASS
+required length 9          n=9         p=2  scan=PASS repeats=PASS inputs=PASS PASS
+required length 9          n=9         p=4  scan=PASS repeats=PASS inputs=PASS PASS
+required length 9          n=9         p=8  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1024       n=1024      p=1  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1024       n=1024      p=2  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1024       n=1024      p=4  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1024       n=1024      p=8  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1025       n=1025      p=1  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1025       n=1025      p=2  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1025       n=1025      p=4  scan=PASS repeats=PASS inputs=PASS PASS
+required length 1025       n=1025      p=8  scan=PASS repeats=PASS inputs=PASS PASS
+scan example               n=5         p=1  scan=PASS repeats=PASS inputs=PASS PASS
+scan example               n=5         p=2  scan=PASS repeats=PASS inputs=PASS PASS
+scan example               n=5         p=4  scan=PASS repeats=PASS inputs=PASS PASS
+scan example               n=5         p=8  scan=PASS repeats=PASS inputs=PASS PASS
+repeats example            n=10        p=1  scan=PASS repeats=PASS inputs=PASS PASS
+repeats example            n=10        p=2  scan=PASS repeats=PASS inputs=PASS PASS
+repeats example            n=10        p=4  scan=PASS repeats=PASS inputs=PASS PASS
+repeats example            n=10        p=8  scan=PASS repeats=PASS inputs=PASS PASS
+all equal 1025             n=1025      p=1  scan=PASS repeats=PASS inputs=PASS PASS
+all equal 1025             n=1025      p=2  scan=PASS repeats=PASS inputs=PASS PASS
+all equal 1025             n=1025      p=4  scan=PASS repeats=PASS inputs=PASS PASS
+all equal 1025             n=1025      p=8  scan=PASS repeats=PASS inputs=PASS PASS
+all equal 10000            n=10000     p=1  scan=PASS repeats=PASS inputs=PASS PASS
+all equal 10000            n=10000     p=2  scan=PASS repeats=PASS inputs=PASS PASS
+all equal 10000            n=10000     p=4  scan=PASS repeats=PASS inputs=PASS PASS
+all equal 10000            n=10000     p=8  scan=PASS repeats=PASS inputs=PASS PASS
+all distinct 1025          n=1025      p=1  scan=PASS repeats=PASS inputs=PASS PASS
+all distinct 1025          n=1025      p=2  scan=PASS repeats=PASS inputs=PASS PASS
+all distinct 1025          n=1025      p=4  scan=PASS repeats=PASS inputs=PASS PASS
+all distinct 1025          n=1025      p=8  scan=PASS repeats=PASS inputs=PASS PASS
+alternating 0/1 1025       n=1025      p=1  scan=PASS repeats=PASS inputs=PASS PASS
+alternating 0/1 1025       n=1025      p=2  scan=PASS repeats=PASS inputs=PASS PASS
+alternating 0/1 1025       n=1025      p=4  scan=PASS repeats=PASS inputs=PASS PASS
+alternating 0/1 1025       n=1025      p=8  scan=PASS repeats=PASS inputs=PASS PASS
+alternating pairs 1025     n=1025      p=1  scan=PASS repeats=PASS inputs=PASS PASS
+alternating pairs 1025     n=1025      p=2  scan=PASS repeats=PASS inputs=PASS PASS
+alternating pairs 1025     n=1025      p=4  scan=PASS repeats=PASS inputs=PASS PASS
+alternating pairs 1025     n=1025      p=8  scan=PASS repeats=PASS inputs=PASS PASS
+random 2                   n=2         p=1  scan=PASS repeats=PASS inputs=PASS PASS
+random 2                   n=2         p=2  scan=PASS repeats=PASS inputs=PASS PASS
+random 2                   n=2         p=4  scan=PASS repeats=PASS inputs=PASS PASS
+random 2                   n=2         p=8  scan=PASS repeats=PASS inputs=PASS PASS
+random 3                   n=3         p=1  scan=PASS repeats=PASS inputs=PASS PASS
+random 3                   n=3         p=2  scan=PASS repeats=PASS inputs=PASS PASS
+random 3                   n=3         p=4  scan=PASS repeats=PASS inputs=PASS PASS
+random 3                   n=3         p=8  scan=PASS repeats=PASS inputs=PASS PASS
+random 17                  n=17        p=1  scan=PASS repeats=PASS inputs=PASS PASS
+random 17                  n=17        p=2  scan=PASS repeats=PASS inputs=PASS PASS
+random 17                  n=17        p=4  scan=PASS repeats=PASS inputs=PASS PASS
+random 17                  n=17        p=8  scan=PASS repeats=PASS inputs=PASS PASS
+random 1025                n=1025      p=1  scan=PASS repeats=PASS inputs=PASS PASS
+random 1025                n=1025      p=2  scan=PASS repeats=PASS inputs=PASS PASS
+random 1025                n=1025      p=4  scan=PASS repeats=PASS inputs=PASS PASS
+random 1025                n=1025      p=8  scan=PASS repeats=PASS inputs=PASS PASS
+random 100000              n=100000    p=1  scan=PASS repeats=PASS inputs=PASS PASS
+random 100000              n=100000    p=2  scan=PASS repeats=PASS inputs=PASS PASS
+random 100000              n=100000    p=4  scan=PASS repeats=PASS inputs=PASS PASS
+random 100000              n=100000    p=8  scan=PASS repeats=PASS inputs=PASS PASS
+random 1000000             n=1000000   p=1  scan=PASS repeats=PASS inputs=PASS PASS
+random 1000000             n=1000000   p=2  scan=PASS repeats=PASS inputs=PASS PASS
+random 1000000             n=1000000   p=4  scan=PASS repeats=PASS inputs=PASS PASS
+random 1000000             n=1000000   p=8  scan=PASS repeats=PASS inputs=PASS PASS
+random 10000000            n=10000000  p=1  scan=PASS repeats=PASS inputs=PASS PASS
+random 10000000            n=10000000  p=2  scan=PASS repeats=PASS inputs=PASS PASS
+random 10000000            n=10000000  p=4  scan=PASS repeats=PASS inputs=PASS PASS
+random 10000000            n=10000000  p=8  scan=PASS repeats=PASS inputs=PASS PASS
+
+EDGE TESTS: 84 checks, 0 failed -> PASS

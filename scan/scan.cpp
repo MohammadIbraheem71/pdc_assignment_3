@@ -1,5 +1,7 @@
 // Part 2: reference scan and repeat compaction, followed by the two functions to complete.
 #include "scan.h"
+#include <cstddef>
+#include <memory>
 #include <vector>
 
 // Reference implementations. Every parallel result is compared against these.
@@ -17,22 +19,89 @@ std::vector<int> find_repeats_serial(const std::vector<int>& input) {
 }
 
 // Your implementations go here. You may add helper functions above them.
-std::vector<int> exclusive_scan_parallel(const std::vector<int>& input) {
-    std::vector<int> result(input.size(),0);
-    // TODO: implement a parallel exclusive scan with OpenMP.
-    // Use separate stages (for example an up sweep followed by a down sweep)
-    // with safe synchronization between them. A blocked approach with per
-    // thread partial sums is also accepted if you explain it in the report.
-    // Support empty arrays and lengths that are not powers of two.
-    // Do not call exclusive_scan_serial or the standard library scan
-    // algorithms, and do not set the thread count in this function.
-    return result;
+namespace {
+
+// Smallest power of two greater than or equal to n (n > 0).
+std::size_t next_power_of_two(std::size_t n) {
+    std::size_t power = 1;
+    while (power < n) power <<= 1;
+    return power;
 }
+
+}  // namespace
+
+std::vector<int> exclusive_scan_parallel(const std::vector<int>& input) {
+    const std::size_t n = input.size();
+    if (n == 0) return {};
+    if (n == 1) return {0};
+
+    // Pad with zero, the identity of addition, to the next power of two. The
+    // padding is invisible in the output because the result is truncated to n.
+    const std::size_t N = next_power_of_two(n);
+    std::unique_ptr<int[]> tree(new int[N]);
+
+    #pragma omp parallel
+    {
+        // Copy the input and zero the padding in parallel. Every index is
+        // written by exactly one thread.
+        #pragma omp for schedule(static)
+        for (std::size_t i = 0; i < N; ++i) tree[i] = i < n ? input[i] : 0;
+
+        // Up-sweep: tree[node] becomes the sum of its subtree. At one level the
+        // end indices k + 2*d - 1 are disjoint, so updates need no atomics.
+        // The implicit barrier after each omp for separates the levels.
+        for (std::size_t d = 1; d < N; d <<= 1) {
+            #pragma omp for schedule(static)
+            for (std::size_t k = 0; k < N; k += 2 * d)
+                tree[k + 2 * d - 1] += tree[k + d - 1];
+        }
+
+        // Turn the inclusive root sum into the exclusive identity.
+        #pragma omp single
+        tree[N - 1] = 0;
+
+        // Down-sweep: replace each node with the exclusive prefix for its
+        // subtree. The two indices touched per block are disjoint across k.
+        for (std::size_t d = N >> 1; d > 0; d >>= 1) {
+            #pragma omp for schedule(static)
+            for (std::size_t k = 0; k < N; k += 2 * d) {
+                const int left = tree[k + d - 1];
+                tree[k + d - 1] = tree[k + 2 * d - 1];
+                tree[k + 2 * d - 1] += left;
+            }
+        }
+    }
+
+    // Range construction copies without a zero-initialization pass.
+    return std::vector<int>(tree.get(), tree.get() + n);
+}
+
 std::vector<int> find_repeats_parallel(const std::vector<int>& input) {
-    // TODO: build a 0/1 flag array, scan it to get destination offsets, then
-    // scatter each matching index to its offset in the output.
-    // The output must be in ascending order and its length must be exactly the
-    // number of repeated positions. Handle arrays of length 0 and 1.
-    (void)input;
-    return {};
+    const std::size_t n = input.size();
+    if (n < 2) return {};
+    const std::size_t m = n - 1;
+
+    // Step 1: flags[i] is 1 exactly when position i is a repeat. Reading
+    // input[i + 1] is safe because i < n - 1.
+    std::vector<int> flags(m);
+    #pragma omp parallel for schedule(static)
+    for (std::size_t i = 0; i < m; ++i)
+        flags[i] = input[i] == input[i + 1] ? 1 : 0;
+
+    // Step 2: exclusive prefix sums give each flagged position its slot.
+    const std::vector<int> offsets = exclusive_scan_parallel(flags);
+
+    // Step 3: the last offset plus the last flag is the exact output length.
+    const std::size_t total =
+        static_cast<std::size_t>(offsets[m - 1] + flags[m - 1]);
+    std::vector<int> result(total);
+
+    // Step 4: scatter. Offsets increase by one at every flagged position, so
+    // two iterations never write the same slot; ascending i gives ascending
+    // output indices.
+    #pragma omp parallel for schedule(static)
+    for (std::size_t i = 0; i < m; ++i)
+        if (flags[i]) result[static_cast<std::size_t>(offsets[i])] = static_cast<int>(i);
+
+    return result;
 }

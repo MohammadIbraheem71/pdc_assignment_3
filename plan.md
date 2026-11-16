@@ -130,3 +130,177 @@ and signatures stay unchanged.
 1. Re-run the final verification.
 2. Run `make clean`, remove `saxpy/.part1_build`, verify no binaries/PPMs remain.
 3. Report the final summary.
+
+---
+
+# Part 2: Exclusive Scan and Repeated-Index Compaction
+
+## Goal
+
+Implement `exclusive_scan_parallel()` and `find_repeats_parallel()` in `scan/scan.cpp`
+without changing the serial references, signatures, or supplied tests. Verify against
+the serial versions on the required edge lengths and random/patterned inputs, visualize
+the tree scan stages for n=16, benchmark serial vs parallel scan (and repeats) at
+n=1e5 and n=1e7 on 1/2/4/8 threads, and explain the measured behaviour using the
+work/span model. Part 1 (`saxpy/`) is finished and must not be changed.
+
+## Checklist
+
+- [x] Read `README.md`, `Makefile`, `scan/scan.h`, `scan/scan.cpp`, `scan/main.cpp`, `scan/bench.cpp`, and the shared timing/RNG headers
+- [x] Implement `exclusive_scan_parallel()` (tree-based up-sweep/down-sweep, padding to a power of two)
+- [x] Implement `find_repeats_parallel()` using flags, scan offsets, and scatter
+- [x] Build and run `./scan_demo` for the required lengths; record PASS/FAIL
+- [x] Add a separate edge-case test file and save its output to a text file
+- [x] Write the staged n=16 up/down-sweep program and save its output
+- [x] Write the n=1025 padding calculation and strategy in the notes
+- [x] Write `scan/bench_scan.cpp` + run script (CSV + readable table, `omp_get_wtime`, warm-up + median of >=5, both scan and repeats)
+- [x] Record machine info (already in Part 1; refresh compiler/CPU/OpenMP facts for this part)
+- [x] Generate a speedup-vs-threads PNG for both sizes
+- [x] Write `part2_notes.md` (work/span, synchronization, padding, measured comparison, assumptions)
+- [x] Write `README_part2.md` with exact compile/test/benchmark commands
+- [x] Run `make clean`, remove extra binaries, verify only report artifacts remain
+- [x] Final summary (files, test status, staged table, timing table, manual follow-ups)
+
+## Findings from reading the starter
+
+- `Makefile`: builds `scan_demo` from `scan/main.cpp` + `scan/scan.cpp`, and
+  `scan_bench` from `scan/bench.cpp` + `scan/scan.cpp`, with
+  `-O2 -std=c++17 -Wall -Wextra -fopenmp`. Extra Part 2 files will be compiled by
+  scripts so the shared `Makefile` stays untouched.
+- `scan/scan.cpp`: the serial scan and serial repeats functions are complete and must
+  not be edited. Both parallel functions are stubs: `exclusive_scan_parallel()` returns
+  all zeros and `find_repeats_parallel()` returns an empty vector.
+- `scan/scan.h`: signatures are fixed. The scan result has the same length as the input
+  and `output[0] = 0`; `< 2` elements produce no repeats. The comment explicitly says
+  `find_repeats_parallel` should use `exclusive_scan_parallel` or the same scan
+  technique on a 0/1 flag array.
+- `scan/main.cpp`: `./scan_demo [n]` compares both functions on one deterministic input,
+  exits 0 only if both match, and the README requires n = 0, 1, 7, 8, 9, 1024, 1025.
+- `scan/bench.cpp`: supplied benchmark validates every parallel result against serial
+  before timing, uses `common/timing.h` and the deterministic `Lcg` (range 0..3, seed
+  12345), and reports medians. It has no CSV and does not use `omp_get_wtime()`.
+- Machine (from Part 1): Intel Xeon E5-2650 v3, 10 physical cores / 20 logical CPUs,
+  25 MiB L3, Ubuntu 26.04.1, g++ 15.2.0, libgomp 16, `_OPENMP = 201511`,
+  runtime advertises OpenMP 5.1. 8 threads are supported.
+
+## Decisions
+
+- Use a Blelloch tree scan: copy the input into a power-of-two tree, up-sweep to
+  inclusive subtree sums, set the root to 0, then down-sweep to exclusive prefixes and
+  truncate to n. Reason: it makes each level's writes disjoint, directly matches the
+  n=16 staged demonstration, and handles non-power-of-two lengths safely by padding
+  with the identity element 0.
+- Pad with zeros to `N = next_power_of_two(n)`. Padding adds zeros to every sum, so it
+  cannot change any prefix value; the result is truncated back to n. This is simple and
+  correct but costs memory and work at n=1025 (N=2048) and especially n=1e7
+  (N=16777216). A blocked two-pass scan would avoid that padding; it is noted as the
+  main alternative in the analysis.
+- Use one `#pragma omp parallel` region with an `omp for` per level, relying on the
+  implicit barrier at the end of each `omp for` and after a `single` that sets the root
+  to zero. This avoids one fork/join per level while still synchronizing every stage.
+- Allocate the padded tree with `std::unique_ptr<int[]>` (`new int[N]`) and initialize
+  it in a parallel loop (`input[i]` for i<n, 0 otherwise), so there is no serial
+  zero-fill of the whole tree. Build the returned `std::vector<int>` with the range
+  constructor from the first n tree entries, avoiding another zero-initialized vector.
+  Inputs are only read, never modified.
+- `find_repeats_parallel`: build flags for i in [0, n-2] (so A[i+1] is never read out of
+  bounds), scan the flags, compute `total = offsets.back() + flags.back()`, allocate the
+  exact output size, and scatter `i` to `out[offsets[i]]`. Prefix offsets are strictly
+  increasing at flagged positions, so the scatter has no write races and preserves
+  ascending order.
+- Extra test/benchmark/stage/plot programs live under `scan/` and are built by scripts;
+  the top-level `Makefile` is unchanged.
+- Benchmark uses 1 warm-up + 9 timed runs (>= 5 required), `omp_get_wtime()`, median,
+  n = 1e5 and 1e7, 1/2/4/8 threads where supported. `T1` is the parallel function at 1
+  thread, the serial reference is reported separately, `Sp = T1/Tp`, `Ep = Sp/p`.
+  Both scan and repeats are measured.
+
+## Findings / Results
+
+- Implementation: `exclusive_scan_parallel()` pads to `N = next_power_of_two(n)` using a
+  `std::unique_ptr<int[]>` tree initialized in parallel, runs the up-sweep and
+  down-sweep inside one `omp parallel` region with one `omp for` per level and an
+  implicit barrier between levels, sets the root to 0 under `omp single`, and returns
+  `std::vector<int>(tree, tree+n)` (truncating the padding). n=0 returns `{}` and n=1
+  returns `{0}` directly. `find_repeats_parallel()` builds the n-1 flags, calls the
+  scan, computes the exact output length from the last offset plus last flag, and
+  scatters the indices in parallel.
+- Build: `make scan_demo` succeeds with no warnings.
+- Demo: all seven required lengths (0, 1, 7, 8, 9, 1024, 1025) report
+  `scan=PASS repeats=PASS` at OMP_NUM_THREADS = 1, 2, 4 and 8 (28/28 runs).
+- Tests: `scan/edge_tests.cpp` (run via `scan/run_tests.sh`) covers the required lengths
+  0/1/7/8/9/1024/1025, header examples, all-equal, all-distinct, alternating 0/1,
+  alternating pairs, and fixed-seed random arrays of 2, 3, 17, 1025, 1e5, 1e6 and 1e7
+  elements. All **84 checks pass** at 1/2/4/8 threads; inputs are unchanged; output is
+  saved in `part2_tests.log`.
+- Staged n=16 scan (`scan/scan_stages.cpp`, output in `part2_stages.txt`) matches the
+  expected exclusive scan exactly. Levels:
+  initial `[1,2,3,4,1,2,3,4,1,2,3,4,1,2,3,4]`;
+  up d=1 `[1,3,3,7,1,3,3,7,1,3,3,7,1,3,3,7]`;
+  up d=2 `[1,3,3,10,1,3,3,10,1,3,3,10,1,3,3,10]`;
+  up d=4 `[1,3,3,10,1,3,3,20,1,3,3,10,1,3,3,20]`;
+  up d=8 `[1,3,3,10,1,3,3,20,1,3,3,10,1,3,3,40]`;
+  root set to 0 `[... , 0]`;
+  down d=8 `[1,3,3,10,1,3,3,0,1,3,3,10,1,3,3,20]`;
+  down d=4 `[1,3,3,0,1,3,3,10,1,3,3,20,1,3,3,30]`;
+  down d=2 `[1,0,3,3,1,10,3,13,1,20,3,23,1,30,3,33]`;
+  down d=1/final `[0,1,3,6,10,11,13,16,20,21,23,26,30,31,33,36]` (PASS).
+- Benchmarks (`scan/bench_scan.cpp`, built and run by `scan/run_bench.sh`): 9 timed runs
+  + 1 warm-up per point, median, `omp_get_wtime()`, n = 1e5 and 1e7, p = 1, 2, 4, 8,
+  both scan and repeats. Raw data `scan_results.csv`, table `scan_bench.txt`. `T1` is
+  the parallel function on 1 thread; the serial reference is a separate row.
+  - n=1e5 scan: serial 0.094254 ms; parallel 0.702160 / 0.342428 / 0.254396 /
+    0.158572 ms at p = 1/2/4/8; Sp = 1 / 2.051 / 2.760 / 4.428; vs_serial =
+    0.134 / 0.275 / 0.371 / 0.594.
+  - n=1e5 repeats: serial 0.410349 ms; parallel 1.841915 / 1.238569 / 0.957811 /
+    0.830097 ms; Sp = 1 / 1.487 / 1.923 / 2.219; vs_serial =
+    0.223 / 0.331 / 0.428 / 0.494.
+  - n=1e7 scan: serial 39.062097 ms; parallel 238.780226 / 206.969825 / 189.146230 /
+    194.364105 ms; Sp = 1 / 1.154 / 1.262 / 1.229; vs_serial =
+    0.164 / 0.189 / 0.207 / 0.201.
+  - n=1e7 repeats: serial 35.670948 ms; parallel 314.212601 / 269.393017 / 257.763239 /
+    235.890687 ms; Sp = 1 / 1.166 / 1.219 / 1.332; vs_serial =
+    0.114 / 0.132 / 0.138 / 0.151.
+  - Result: the parallel tree scan is correct but **slower than serial at every measured
+    point**. It scales up to 4.43x (scan, 1e5) from 1 to 8 threads but starts from 7.45x
+    the serial time; at 1e7 the preallocated sweep scales only 1.11x (174.4 -> 156.8 ms).
+- Diagnostic probe (`scan/probe_scan.cpp`) decomposes the n=1e7 8-thread time: full
+  188.8 ms, preallocated sweep 156.8 ms, tree allocate+parallel-fill+result-copy
+  53.2 ms (~28% of the total). The probe's `full` matches the CSV within a few percent.
+- Derived cache-line analysis (no counters): the array-layout tree touches 6,291,454
+  distinct 64-byte lines per sweep at N=2^24, 12,582,908 for both sweeps; at 64 B read +
+  64 B write-back that is ~1.61 GB, i.e. ~10 GB/s over the measured 156.8 ms, versus
+  ~80 MB for the serial scan. This memory traffic, not the add count, explains why the
+  parallel version loses. Labelled as a derived estimate in the notes.
+- Padding: n=1025 -> N=2048, 1023 extra elements = 99.805% (assignment text rounds to
+  ~99.9%). n=1e5 -> 131072 (31.1% extra, 0.50 MiB); n=1e7 -> 16777216 (67.8% extra,
+  64 MiB, 2.7x the 25 MiB L3).
+- Graph: matplotlib is not installed (`ModuleNotFoundError`), so
+  `scan/plot_scan_speedup.py` used its Pillow fallback and wrote `scan_speedup.png`
+  (1200x800) from `scan_results.csv`; the script uses matplotlib automatically when
+  available.
+- Notes: `part2_notes.md` contains the staged table, work/span `2(N-1)` / `2 log2 N`,
+  the barrier argument (48+2 barriers at n=1e7, 34+2 at n=1e5), the padding strategy,
+  the measured tables, the probe decomposition, the cache-line model, and a separate
+  "assumptions and limitations" section.
+- Commands: `README_part2.md` lists the exact compile, test, staged-scan, benchmark,
+  plot, and cleanup commands.
+- Repeatability: one separate 1-run check of the supplied benchmark during a higher-load
+  window measured the n=1e5 serial scan at 0.294 ms instead of 0.094 ms (an interference
+  outlier on that core; the repeats serial row agreed). The 9-run medians in
+  `scan_results.csv` are the recorded values; the n=1e7 gap (vs_serial ~0.20) is large and
+  stable.
+- Cleanup: `make clean` and `rm -rf scan/.part2_build` remove all executables; only the
+  report artifacts (`scan_results.csv`, `scan_bench.txt`, `scan_speedup.png`,
+  `part2_tests.log`, `part2_stages.txt`, `part2_notes.md`, `README_part2.md`) remain.
+
+## Next steps
+
+1. Keep the measured artifacts with the submission and put the staged table and timing
+   table into the PDF report.
+2. Write the explanations in own words (the notes are a reference, not a final report).
+3. If a faster scan is wanted, replace the padded tree with a blocked two-pass scan
+   (no padding, two linear passes) and re-measure; the tree version is the one required
+   by the staged demonstration and is what was measured here.
+4. Part 3 (renderer) is still untouched; `make check` will keep failing until it is done.
+

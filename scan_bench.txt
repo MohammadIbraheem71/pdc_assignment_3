@@ -1,0 +1,30 @@
+# compiler 15.2.0
+# _OPENMP 201511
+# processors available 20, default maximum threads 20
+# runs 9 timed + 1 warm-up, median reported, omp_get_wtime, I/O excluded
+# T1 = parallel function on 1 thread; speedup = T1/Tp; efficiency = speedup/p
+# serial_ms = serial reference median; vs_serial = serial_ms/median_ms
+
+size         op         variant   threads    median_ms   speedup  efficiency    serial_ms  vs_serial
+100000       scan       serial          1     0.094254       n/a         n/a     0.094254      1.000
+100000       scan       parallel        1     0.702160     1.000       1.000     0.094254      0.134
+100000       scan       parallel        2     0.342428     2.051       1.025     0.094254      0.275
+100000       scan       parallel        4     0.254396     2.760       0.690     0.094254      0.371
+100000       scan       parallel        8     0.158572     4.428       0.554     0.094254      0.594
+100000       repeats    serial          1     0.410349       n/a         n/a     0.410349      1.000
+100000       repeats    parallel        1     1.841915     1.000       1.000     0.410349      0.223
+100000       repeats    parallel        2     1.238569     1.487       0.744     0.410349      0.331
+100000       repeats    parallel        4     0.957811     1.923       0.481     0.410349      0.428
+100000       repeats    parallel        8     0.830097     2.219       0.277     0.410349      0.494
+10000000     scan       serial          1    39.062097       n/a         n/a    39.062097      1.000
+10000000     scan       parallel        1   238.780226     1.000       1.000    39.062097      0.164
+10000000     scan       parallel        2   206.969825     1.154       0.577    39.062097      0.189
+10000000     scan       parallel        4   189.146230     1.262       0.316    39.062097      0.207
+10000000     scan       parallel        8   194.364105     1.229       0.154    39.062097      0.201
+10000000     repeats    serial          1    35.670948       n/a         n/a    35.670948      1.000
+10000000     repeats    parallel        1   314.212601     1.000       1.000    35.670948      0.114
+10000000     repeats    parallel        2   269.393017     1.166       0.583    35.670948      0.132
+10000000     repeats    parallel        4   257.763239     1.219       0.305    35.670948      0.138
+10000000     repeats    parallel        8   235.890687     1.332       0.167    35.670948      0.151
+
+# wrote 20 rows to scan_results.csv
