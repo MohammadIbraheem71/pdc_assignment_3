@@ -19,10 +19,13 @@ std::vector<float> saxpy_parallel(float a, const std::vector<float>& x,
     // That serial step is part of the measured time and is worth remembering
     // when you explain your efficiency numbers in the report.
     std::vector<float> out(x.size(), 0.0f);
-    // TODO: compute out with an OpenMP parallel for loop.
-    // Each element must be written exactly once and by exactly one thread.
-    // Do not call saxpy_serial here. Do not set the thread count in this
-    // function, the demo and benchmark programs control it from outside.
-    (void)a;
+    const std::size_t n = x.size();
+    // Each iteration owns out[i], so no synchronization is needed. The loop
+    // visits indices in order and works for empty and tiny arrays as well as
+    // lengths that are not a multiple of the thread count.
+    #pragma omp parallel for
+    for (std::size_t i = 0; i < n; ++i) {
+        out[i] = a * x[i] + y[i];
+    }
     return out;
 }

@@ -1,0 +1,30 @@
+SAXPY Part 1 edge-case tests
+processors available: 20, thread counts tested: 1,2,4,8
+
+empty                    n=0        threads=1  values=PASS inputs=PASS PASS
+empty                    n=0        threads=2  values=PASS inputs=PASS PASS
+empty                    n=0        threads=4  values=PASS inputs=PASS PASS
+empty                    n=0        threads=8  values=PASS inputs=PASS PASS
+single element           n=1        threads=1  values=PASS inputs=PASS PASS
+single element           n=1        threads=2  values=PASS inputs=PASS PASS
+single element           n=1        threads=4  values=PASS inputs=PASS PASS
+single element           n=1        threads=8  values=PASS inputs=PASS PASS
+smaller than threads     n=3        threads=1  values=PASS inputs=PASS PASS
+smaller than threads     n=3        threads=2  values=PASS inputs=PASS PASS
+smaller than threads     n=3        threads=4  values=PASS inputs=PASS PASS
+smaller than threads     n=3        threads=8  values=PASS inputs=PASS PASS
+odd length 7             n=7        threads=1  values=PASS inputs=PASS PASS
+odd length 7             n=7        threads=2  values=PASS inputs=PASS PASS
+odd length 7             n=7        threads=4  values=PASS inputs=PASS PASS
+odd length 7             n=7        threads=8  values=PASS inputs=PASS PASS
+odd length 1001          n=1001     threads=1  values=PASS inputs=PASS PASS
+odd length 1001          n=1001     threads=2  values=PASS inputs=PASS PASS
+odd length 1001          n=1001     threads=4  values=PASS inputs=PASS PASS
+odd length 1001          n=1001     threads=8  values=PASS inputs=PASS PASS
+large random 1e7         n=10000000 threads=1  values=PASS inputs=PASS PASS
+large random 1e7         n=10000000 threads=2  values=PASS inputs=PASS PASS
+large random 1e7         n=10000000 threads=4  values=PASS inputs=PASS PASS
+large random 1e7         n=10000000 threads=8  values=PASS inputs=PASS PASS
+size mismatch throws     PASS
+
+EDGE TESTS: 25 checks, 0 failed -> PASS
