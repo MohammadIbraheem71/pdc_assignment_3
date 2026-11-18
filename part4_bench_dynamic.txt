@@ -1,0 +1,148 @@
+# Part 4 benchmark
+# compiler 15.2.0, OpenMP macro 201511, processors 20
+# size 1024x1024, 5 timed runs after one warm-up, medians with omp_get_wtime
+# baseline schedule static; optimized tile 16, schedule dynamic chunk 4
+# T1 = baseline render_parallel on 1 thread for each scene
+# speedup = T1/median, efficiency = speedup/p, self = version T1/version Tp
+# optimized preprocess+render are internal medians; total is external
+# file output happens only after all timed regions
+
+## scene p4_sparse: 2000 circles, 1024x1024, reference 5667.0902 ms
+# optimized lists: tile=16 tiles=4096 candidates=5781 c_avg=1.411 t_avg=2.890 min_tile=0 max_tile=7 predicted_test_speedup=1417.06x
+variant     p    median_ms       min_ms       max_ms   speedup     eff     self       pre_ms    render_ms
+baseline    1    3221.5808    3171.8038    3325.8309     1.000   1.000    1.000          n/a          n/a
+baseline    2    1674.5653    1645.5792    1692.2844     1.924   0.962    1.924          n/a          n/a
+baseline    4     942.2974     873.5724     958.2681     3.419   0.855    3.419          n/a          n/a
+baseline    8     490.5481     454.9945     517.5382     6.567   0.821    6.567          n/a          n/a
+optimized   1      10.2920       8.5409      11.1882   313.017 313.017    1.000       2.0683       8.0035
+optimized   2       7.5576       6.6770       9.9864   426.269 213.134    1.362       2.0154       5.5374
+optimized   4       3.3056       3.2086       3.8344   974.586 243.647    3.114       0.9528       2.3072
+optimized   8       2.0640       2.0434       2.1865  1560.824 195.103    4.986       0.9665       1.0983
+# p4_sparse at p=8: total 2.0640 = preprocess 0.9665 + render 1.0983 (+ -0.0008 untimed in-call overhead)
+# p4_sparse speedup vs baseline T1 = 1560.824x; optimized self speedup = 4.986x
+# busy p=8: busy_ms mean=1.072 max=1.081 max/mean=1.01 | span_ms mean=1.103 max=1.105 max/mean=1.00 | idle=2.8%
+#   thread 0 busy_ms=1.072 span_ms=1.103
+#   thread 1 busy_ms=1.081 span_ms=1.103
+#   thread 2 busy_ms=1.065 span_ms=1.103
+#   thread 3 busy_ms=1.075 span_ms=1.105
+#   thread 4 busy_ms=1.066 span_ms=1.103
+#   thread 5 busy_ms=1.075 span_ms=1.103
+#   thread 6 busy_ms=1.070 span_ms=1.103
+#   thread 7 busy_ms=1.069 span_ms=1.103
+
+## scene p4_heavy: 400 circles, 1024x1024, reference 1325.1533 ms
+# optimized lists: tile=16 tiles=4096 candidates=485786 c_avg=118.600 t_avg=1214.465 min_tile=29 max_tile=218 predicted_test_speedup=3.37x
+variant     p    median_ms       min_ms       max_ms   speedup     eff     self       pre_ms    render_ms
+baseline    1     916.2348     905.8140    1057.4673     1.000   1.000    1.000          n/a          n/a
+baseline    2     480.0146     470.1151     597.2281     1.909   0.954    1.909          n/a          n/a
+baseline    4     257.5112     257.4257     279.7473     3.558   0.890    3.558          n/a          n/a
+baseline    8     142.0142     130.6919     155.0928     6.452   0.806    6.452          n/a          n/a
+optimized   1     584.0129     563.8884     623.5615     1.569   1.569    1.000       6.7867     577.4902
+optimized   2     292.3566     291.4384     320.6685     3.134   1.567    1.998       6.7040     285.4829
+optimized   4     155.0689     154.7070     169.3996     5.909   1.477    3.766       7.0707     148.0442
+optimized   8      86.3133      84.8314      89.5741    10.615   1.327    6.766       6.8151      79.2146
+# p4_heavy at p=8: total 86.3133 = preprocess 6.8151 + render 79.2146 (+ 0.2836 untimed in-call overhead)
+# p4_heavy speedup vs baseline T1 = 10.615x; optimized self speedup = 6.766x
+# busy p=8: busy_ms mean=74.625 max=74.710 max/mean=1.00 | span_ms mean=74.720 max=74.749 max/mean=1.00 | idle=0.1%
+#   thread 0 busy_ms=74.710 span_ms=74.749
+#   thread 1 busy_ms=74.494 span_ms=74.707
+#   thread 2 busy_ms=74.679 span_ms=74.727
+#   thread 3 busy_ms=74.619 span_ms=74.720
+#   thread 4 busy_ms=74.618 span_ms=74.708
+#   thread 5 busy_ms=74.561 span_ms=74.728
+#   thread 6 busy_ms=74.669 span_ms=74.718
+#   thread 7 busy_ms=74.650 span_ms=74.707
+
+## scene p4_corner: 760 circles, 1024x1024, reference 2080.5965 ms
+# optimized lists: tile=16 tiles=4096 candidates=5690 c_avg=1.389 t_avg=7.487 min_tile=0 max_tile=169 predicted_test_speedup=547.09x
+variant     p    median_ms       min_ms       max_ms   speedup     eff     self       pre_ms    render_ms
+baseline    1    1197.8985    1190.3866    1200.8345     1.000   1.000    1.000          n/a          n/a
+baseline    2     642.4617     620.5878     743.2343     1.865   0.932    1.865          n/a          n/a
+baseline    4     326.0995     322.6738     354.2431     3.673   0.918    3.673          n/a          n/a
+baseline    8     189.5676     180.6610     246.0153     6.319   0.790    6.319          n/a          n/a
+optimized   1      11.7546       9.8561      13.0624   101.909 101.909    1.000       0.8881      10.8334
+optimized   2       5.7279       5.5498       6.0027   209.133 104.566    2.052       0.8468       4.8341
+optimized   4       3.9245       3.4054       3.9719   305.239  76.310    2.995       1.0518       2.8593
+optimized   8       2.2570       2.2334       2.2964   530.758  66.345    5.208       0.9020       1.3571
+# p4_corner at p=8: total 2.2570 = preprocess 0.9020 + render 1.3571 (+ -0.0021 untimed in-call overhead)
+# p4_corner speedup vs baseline T1 = 530.758x; optimized self speedup = 5.208x
+# busy p=8: busy_ms mean=1.347 max=1.360 max/mean=1.01 | span_ms mean=1.379 max=1.381 max/mean=1.00 | idle=2.3%
+#   thread 0 busy_ms=1.345 span_ms=1.379
+#   thread 1 busy_ms=1.360 span_ms=1.379
+#   thread 2 busy_ms=1.341 span_ms=1.379
+#   thread 3 busy_ms=1.339 span_ms=1.379
+#   thread 4 busy_ms=1.352 span_ms=1.379
+#   thread 5 busy_ms=1.349 span_ms=1.381
+#   thread 6 busy_ms=1.347 span_ms=1.379
+#   thread 7 busy_ms=1.342 span_ms=1.379
+
+## scene p4_few: 8 circles, 1024x1024, reference 36.1930 ms
+# optimized lists: tile=16 tiles=4096 candidates=5616 c_avg=1.371 t_avg=702.000 min_tile=0 max_tile=7 predicted_test_speedup=5.83x
+variant     p    median_ms       min_ms       max_ms   speedup     eff     self       pre_ms    render_ms
+baseline    1      20.1950      19.4690      20.7271     1.000   1.000    1.000          n/a          n/a
+baseline    2      14.0190      13.3139      24.7311     1.441   0.720    1.441          n/a          n/a
+baseline    4       6.9225       6.3975       7.3870     2.917   0.729    2.917          n/a          n/a
+baseline    8       3.8330       3.6201       6.4072     5.269   0.659    5.269          n/a          n/a
+optimized   1       9.8658       9.7226      10.4533     2.047   2.047    1.000       0.7973       9.1140
+optimized   2       6.4560       6.1288       6.7080     3.128   1.564    1.528       0.9466       5.4072
+optimized   4       3.6759       3.5684       3.7774     5.494   1.373    2.684       0.9076       2.7423
+optimized   8       2.3622       2.2962       2.4318     8.549   1.069    4.176       0.9237       1.4430
+# p4_few at p=8: total 2.3622 = preprocess 0.9237 + render 1.4430 (+ -0.0045 untimed in-call overhead)
+# p4_few speedup vs baseline T1 = 8.549x; optimized self speedup = 4.176x
+# busy p=8: busy_ms mean=1.336 max=1.343 max/mean=1.00 | span_ms mean=1.367 max=1.368 max/mean=1.00 | idle=2.3%
+#   thread 0 busy_ms=1.332 span_ms=1.367
+#   thread 1 busy_ms=1.338 span_ms=1.367
+#   thread 2 busy_ms=1.333 span_ms=1.367
+#   thread 3 busy_ms=1.333 span_ms=1.367
+#   thread 4 busy_ms=1.343 span_ms=1.368
+#   thread 5 busy_ms=1.333 span_ms=1.367
+#   thread 6 busy_ms=1.338 span_ms=1.367
+#   thread 7 busy_ms=1.339 span_ms=1.367
+
+## scene p4_one: 1 circles, 1024x1024, reference 11.4570 ms
+# optimized lists: tile=16 tiles=4096 candidates=4096 c_avg=1.000 t_avg=4096.000 min_tile=1 max_tile=1 predicted_test_speedup=1.00x
+variant     p    median_ms       min_ms       max_ms   speedup     eff     self       pre_ms    render_ms
+baseline    1       7.1540       6.6402       8.3288     1.000   1.000    1.000          n/a          n/a
+baseline    2       5.4306       5.1921       6.2590     1.317   0.659    1.317          n/a          n/a
+baseline    4       2.7700       2.6877       3.0520     2.583   0.646    2.583          n/a          n/a
+baseline    8       1.9156       1.8623       2.1404     3.735   0.467    3.735          n/a          n/a
+optimized   1       9.2241       8.8626       9.9143     0.776   0.776    1.000       0.7503       8.4094
+optimized   2       5.9646       5.7589       6.4071     1.199   0.600    1.546       0.9244       5.0851
+optimized   4       3.5144       3.4747       3.7178     2.036   0.509    2.625       0.9231       2.6134
+optimized   8       2.2758       2.2245       2.6408     3.143   0.393    4.053       0.9278       1.3408
+# p4_one at p=8: total 2.2758 = preprocess 0.9278 + render 1.3408 (+ 0.0072 untimed in-call overhead)
+# p4_one speedup vs baseline T1 = 3.143x; optimized self speedup = 4.053x
+# busy p=8: busy_ms mean=1.333 max=1.337 max/mean=1.00 | span_ms mean=1.371 max=1.373 max/mean=1.00 | idle=2.8%
+#   thread 0 busy_ms=1.331 span_ms=1.371
+#   thread 1 busy_ms=1.332 span_ms=1.371
+#   thread 2 busy_ms=1.337 span_ms=1.371
+#   thread 3 busy_ms=1.330 span_ms=1.371
+#   thread 4 busy_ms=1.335 span_ms=1.373
+#   thread 5 busy_ms=1.333 span_ms=1.371
+#   thread 6 busy_ms=1.334 span_ms=1.371
+#   thread 7 busy_ms=1.334 span_ms=1.371
+
+## scene p4_huge: 32 circles, 1024x1024, reference 197.3458 ms
+# optimized lists: tile=16 tiles=4096 candidates=131072 c_avg=32.000 t_avg=4096.000 min_tile=32 max_tile=32 predicted_test_speedup=1.00x
+variant     p    median_ms       min_ms       max_ms   speedup     eff     self       pre_ms    render_ms
+baseline    1     168.8805     166.0580     174.6406     1.000   1.000    1.000          n/a          n/a
+baseline    2      89.4684      88.0901      96.7778     1.888   0.944    1.888          n/a          n/a
+baseline    4      53.8308      53.1674      55.8528     3.137   0.784    3.137          n/a          n/a
+baseline    8      27.7378      26.8090      36.1312     6.088   0.761    6.088          n/a          n/a
+optimized   1     178.0001     174.9752     181.9406     0.949   0.949    1.000       2.9000     174.9828
+optimized   2      99.8848      95.5837     101.5813     1.691   0.845    1.782       3.0424      96.9318
+optimized   4      51.6275      50.0668      60.0510     3.271   0.818    3.448       2.6075      48.8063
+optimized   8      27.9622      27.1828      28.9472     6.040   0.755    6.366       2.5331      25.4272
+# p4_huge at p=8: total 27.9622 = preprocess 2.5331 + render 25.4272 (+ 0.0019 untimed in-call overhead)
+# p4_huge speedup vs baseline T1 = 6.040x; optimized self speedup = 6.366x
+# busy p=8: busy_ms mean=25.061 max=25.154 max/mean=1.00 | span_ms mean=25.191 max=25.192 max/mean=1.00 | idle=0.5%
+#   thread 0 busy_ms=25.060 span_ms=25.191
+#   thread 1 busy_ms=24.988 span_ms=25.191
+#   thread 2 busy_ms=25.154 span_ms=25.192
+#   thread 3 busy_ms=25.090 span_ms=25.191
+#   thread 4 busy_ms=24.993 span_ms=25.191
+#   thread 5 busy_ms=25.081 span_ms=25.191
+#   thread 6 busy_ms=25.009 span_ms=25.191
+#   thread 7 busy_ms=25.110 span_ms=25.191
+
+wrote part4_results.csv (48 rows) and part4_busy.csv (48 rows)

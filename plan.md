@@ -484,3 +484,199 @@ decomposition discussion, and the 1024x1024 load calculation. Do not modify `sax
    `README_part3.md`) remain.
 3. Produce the final summary for the user.
 
+---
+
+# Part 4: Renderer Optimization and Performance Investigation
+
+## Goal
+
+Implement an optimized parallel renderer that produces exactly the same image as the
+Part 3 baseline/reference while skipping work that cannot change the result, then measure
+where the win comes from and where it disappears. The chosen primary technique is
+**Option B: ordered per-tile candidate lists** (CSR-style), with a conservative padded
+circle bounding box used only as a filter and the exact reference `covers()`/`blend()`
+used per pixel. `render_parallel()` stays untouched as the baseline (tag
+`part3-baseline`); the optimized code is a new function selected by the benchmark driver.
+
+The investigation must cover deterministic scenes (sparse, heavy overlap, unevenly
+clustered, and pathological few/huge circles), correctness at several thread counts and
+tile sizes, median benchmark tables, a schedule/tile-size sweep, per-thread busy-time
+data, graphs, and a work-model comparison.
+
+## Checklist
+
+- [x] Re-read the Part 3 code, plan, and notes; write down the baseline cost model
+- [x] State the chosen technique and why in this plan
+- [x] Add the optimized-renderer API (new function, stats, runtime tile/schedule/chunk) without changing the baseline
+- [x] Implement conservative circle bounding boxes, deterministic ordered candidate-list construction, and tile-parallel rendering
+- [x] Add deterministic Part 4 scenes (sparse, heavy overlap, clustered, few, one, huge) in new files
+- [x] Build and run the supplied demo/bench on starter and Part 4 scenes; record PASS/FAIL
+- [x] Add Part 4 correctness/determinism tests (all scenes, thread counts, tile sizes, edge cases); save the log
+- [x] Save a few example images in a clearly named folder
+- [x] Write the main benchmark driver (CSV + readable tables, medians, min/max, preprocessing/render split, T1 definition)
+- [x] Compare static/dynamic/guided schedules across tile sizes 8/16/32/64 at max threads on clustered + heavy scenes
+- [x] Measure per-thread busy time and identify the strongest bottleneck per scene with data
+- [x] Record machine info and hyperthreading/turbo relevance
+- [x] Produce speedup-vs-threads, tile/schedule, and per-thread busy-time graphs with notes
+- [x] Write `part4_notes.md` (work model with measured Nc/t_avg/c_avg, when the optimization loses, static vs dynamic, bottlenecks, measured vs inferred)
+- [x] Write `README_part4.md` with exact compile/scene/test/benchmark/graph commands
+- [ ] Final verification, `make clean`, remove extra binaries, keep only report artifacts
+- [ ] Final summary (technique, files, test status, tables, bottlenecks, work model, manual follow-ups)
+
+## Findings from re-reading the Part 3 baseline
+
+- `render_parallel()` decomposes by rows. For every pixel it executes all `Nc` circle
+  tests and blends only the covered circles, so its dominant cost is
+  `Nc * width * height` `covers()` calls. The pixel color is accumulated in a local
+  `Pixel` and written once, so there are no atomics and no per-blend shared-memory
+  round-trips. Circles are applied in original index order.
+- Measured baseline at 1024x1024, `clustered`, 500 circles (Part 3 probe):
+  524,288,000 `covers()` calls, 224,734 covered pixels (21.4%), 1,077,826 blends
+  (0.21% of tests). Per-thread blend counts were 20.2x uneven, but loop times were only
+  1.13x uneven because the uniform test loop dominates.
+- Baseline scaling at 512x512 `clustered` (Part 3): 189.2990 ms at 1 thread,
+  100.9235/54.8234/28.2888 ms at 2/4/8 threads, `Sp = 6.692` at 8 threads. The baseline's
+  1-thread time is 1.76x faster than the serial reference because it avoids a shared
+  pixel load/store for every blend.
+- `render/renderer.cpp` already has the Part 4 stub `render_optimized(width,height,
+  circles)` with the rules: preserve order, use `covers()` for the final test, pad any
+  bounding box by at least one pixel, and count list-building time inside the function.
+- `render/bench.cpp` validates each parallel image against `render_reference()` before
+  timing and skips timings on failure. It does not split preprocessing from rendering,
+  so Part 4 needs its own driver. The starter does not fix an image size; size is a CLI
+  argument. `render/scenes.cpp` has fixed-seed `dense`, `sparse`, `overlap`, `clustered`
+  scenes, but the Part 4-specific scenes will live in new files so the starter scenes
+  remain untouched.
+- Machine (same as Parts 1-3): Intel Xeon E5-2650 v3 @ 2.30 GHz, 10 physical cores /
+  20 logical CPUs, 25 MiB L3, 6.9 GiB RAM, Ubuntu 26.04.1 LTS (kernel 7.0.0-43-generic),
+  g++ 15.2.0, libgomp 16, `_OPENMP = 201511` (OpenMP 4.5), runtime advertises OpenMP
+  5.1. 8 threads are supported. Hyperthreading is enabled (20 logical / 10 physical), so
+  8 workers still fit inside physical cores; turbo and the shared machine can move
+  absolute times by a few percent. `matplotlib` is not installed; Pillow 12.1.1 is
+  available, so graphs use the same matplotlib-or-Pillow pattern as Parts 1/2. `perf`
+  exists but hardware counters were not assumed to be permitted; per-thread
+  `omp_get_wtime()` timers are the primary evidence.
+- Baseline cost model: `W_base = O(Nc * W * H)` tests plus blends for covered pixels.
+  With per-tile culling the expected model is preprocessing `O(Nc * t_avg)` (circle-tile
+  overlaps) plus list construction, and rendering `O(W * H * c_avg)` tests, where
+  `c_avg` is the average candidate count per tile. The expected test-loop speedup is
+  about `Nc / c_avg`, reduced by preprocessing and by blending when many candidates
+  actually cover a pixel.
+
+## Decisions
+
+- **Primary technique: Option B, ordered per-tile candidate lists.** For each tile, store
+  the circles whose padded bounding box overlaps it, in ascending original index. Rendering
+  a tile then tests only its candidates, while still applying them in the exact original
+  order. This preserves correctness by construction and avoids the circle-major ordering
+  problem entirely. It also gives a natural tile-level parallel task with a tunable
+  granularity. A plain per-circle bounding box (Option A) would still force a decision
+  about how to traverse pixels in order and would have poor load balance on clustered
+  scenes, so Option B is the primary technique.
+- **API:** keep `render_parallel()` unchanged. Implement the existing starter entry point
+  `render_optimized(width,height,circles)` as the simple wrapper (reads `RENDER_TILE`,
+  default 16) and add a new function for the driver:
+  `render_parallel_optimized(width,height,circles,tile_size,schedule_kind,chunk_size,stats)`.
+  The new declaration is additive; no existing signature or starter behavior changes.
+  `render_optimized` goes through the same code path, so `render_demo ... optimized` and
+  the supplied `render_bench` keep working.
+- **Runtime knobs:** tile size via the new function argument and `RENDER_TILE` for the
+  wrapper; schedule kind and chunk via `omp_set_schedule()` plus `schedule(runtime)` in the
+  render loop. The driver can therefore compare configurations without recompiling.
+  Default optimized configuration: tile 16, static schedule.
+- **Conservative bounding box:** use `double` arithmetic
+  `x >= w*(cx-r)-0.5` / `x <= w*(cx+r)-0.5`, take `floor(lower)-1` and `ceil(upper)+1`,
+  clamp to the image, and skip the circle when the clamped box is empty. The final
+  coverage decision is still `covers()` with the reference's `float` pixel-centre test and
+  inclusive `<=`. Radius is treated as `|r|` because coverage uses `r*r`.
+- **Deterministic ordered construction:** compute all circle boxes in parallel, count
+  candidates per tile with per-thread local count arrays, reduce them, compute CSR offsets
+  with a serial prefix sum over tiles, then fill by iterating circles in ascending index
+  order and appending each circle index to its tiles. Because the fill visits circles in
+  ascending order, every tile list is ascending. The prefix/fill serial parts are O(T)
+  and O(Nc*t_avg); they are cheap for the measured scenes and their measured fraction is
+  reported as a potential Amdahl limit.
+- **Tile-parallel rendering:** flatten tiles row-major, render whole tiles with
+  `#pragma omp parallel for schedule(runtime)`. Each tile owns disjoint pixels, so no
+  locks or atomics are needed. The inner pixel loop walks the CSR candidate list in order,
+  calls `covers()`/`blend()` exactly as the reference, and writes each pixel once. Tile
+  size stays a parameter, so the sweep can expose the imbalance/dispatch/preprocessing
+  tradeoff.
+- **Scenes:** put Part 4 scenes in new `render/part4_scenes.{h,cpp}` with fixed seeds:
+  `p4_sparse`, `p4_heavy`, `p4_corner`, `p4_few`, `p4_one`, `p4_huge`. The starter scenes
+  are still accepted by the drivers and are used for compatibility checks. All performance
+  measurements use the same 1024x1024 image size unless stated otherwise.
+- **Timing definition:** for each scene, `T1` is the **baseline** `render_parallel` at one
+  thread and is used for every `Sp = T1/Tp` in that scene. Each version's self-relative
+  speedup (`T1_version / Tp_version`) is also reported. Optimized totals are measured
+  externally with `omp_get_wtime()`; preprocessing (including image allocation/white
+  fill) and tile rendering are measured inside the optimized function and reported
+  separately. One warm-up plus at least 5 timed runs; median, min and max.
+- **Output files:** `part4_results.csv` + `part4_bench.txt` for the main table,
+  `part4_sweep.csv` + `part4_sweep.txt` + `part4_busy.csv` for the schedule/tile/busy
+  study, `part4_tests.log` for correctness, `part4_images/` for report images, and root
+  PNGs for graphs. No file output happens inside a timed region.
+
+## Findings / Results
+
+- Reading and cost model: complete (above).
+- Implementation: `render_parallel_optimized()` added in `render/renderer.cpp` with an
+  additive declaration in `renderer.h`; `render_optimized()` is the starter-facing
+  wrapper (`RENDER_TILE`, schedule left to `OMP_SCHEDULE`). Conservative padded boxes,
+  per-thread candidate counting, serial prefix sum, ascending-index fill, and tile-parallel
+  rendering are implemented. `render_parallel()` is unchanged.
+- Build: `make render_demo render_bench` succeeds with no warnings. Quick demo checks:
+  `dense` 256x256, `sparse` 257x257 and `clustered` 256x256 all report
+  `correctness=PASS` with the optimized variant. The supplied bench also passes all four
+  starter scenes at 1/2/4/8 threads (it reports both baseline and optimized rows).
+- Part 4 scenes: `render/part4_scenes.{h,cpp}` add fixed-seed `p4_sparse` (2000 tiny),
+  `p4_heavy` (400 large), `p4_corner` (700 packed top-left + 60 scattered), `p4_few` (8),
+  `p4_one` (1 huge), `p4_huge` (32 huge). Starter scenes remain available through
+  `make_any_scene()` and `all_scene_names()`.
+- Correctness: `render/part4_tests.cpp` (run by `render/run_part4_tests.sh`) reports
+  **202 checks, 0 failed -> PASS** in `part4_tests.log`. It covers all 10 scenes at
+  257x193 (non-divisible by 16), tile sizes 1/2/3/7/8/16/32/64/128/512, static/dynamic/
+  guided schedules, 1/2/4/8 threads, zero/one-pixel images, zero circles, partly/fully
+  outside circles, exact tile boundaries, zero/negative radius, and 64 concentric circles.
+  Every optimized result is within tolerance, **bit-exact** with the reference, and
+  identical over repeated renders.
+- Tests/benchmarks: `render/part4_tests.cpp` is clean (202/202). The main benchmark
+  (`render/bench_part4.cpp`) and the schedule/tile sweep (`render/sweep_part4.cpp`) were
+  run at 1024x1024 with 5 timed runs after one warm-up. Every scene is reference-checked
+  at every thread count before timing; no scene failed. Main tables:
+  `part4_bench_static.txt` (tile 16 static) and `part4_bench_dynamic.txt` (tile 16,
+  dynamic chunk 4), with matching `part4_results_*.csv` and `part4_busy_*.csv`.
+- Measured self speedup at 8 threads (tile 16, dynamic,4) and baseline-T1-relative
+  `Sp`: `p4_sparse` 4.99 / 1560.8, `p4_corner` 5.21 / 530.8, `p4_heavy` 6.77 / 10.6,
+  `p4_few` 4.18 / 8.5, `p4_huge` 6.37 / 6.0, `p4_one` 4.05 / 3.1. The last two are
+  pathological: `c_avg = Nc`, so there is nothing to cull. `p4_one` is 29% slower than
+  the baseline at one thread and 19% slower at eight; `p4_huge` loses 5% at one thread
+  and breaks even at eight.
+- Schedule study: static block scheduling is catastrophic on the clustered scene
+  (`p4_corner` tile 16: 9.72 ms static vs 2.67 ms dynamic,4 at 8 threads; per-thread busy
+  max/mean 4.86 and 79.6% idle vs 1.01 and 2.0%). Small tiles can lose on heavy overlap
+  because preprocessing scales with candidate entries (tile 8 costs 37.75 ms of
+  preprocessing vs 6.87 ms at tile 16). Best measured configurations: `p4_corner`
+  tile 8 dynamic,16 at 2.25 ms; `p4_heavy` tile 32 guided,4 at 78.27 ms.
+- Work model (`part4_workmodel.txt`): test reduction is 1417x (`p4_sparse`), 547x
+  (`p4_corner`), 3.4x (`p4_heavy`), 5.8x (`p4_few`), 1.0x (`p4_one`, `p4_huge`). Blends
+  are 7.7%, 25.6%, 78.8%, 71.9%, 100%, 98.8% of the remaining candidate tests
+  respectively. This explains both the large wins and the break-even cases.
+- Graphs: `part4_speedup_vs_threads.png`, `part4_tile_schedule.png`,
+  `part4_busy_threads.png` produced by `render/plot_part4.py` using the Pillow fallback
+  (matplotlib absent), with labeled axes and one-line notes.
+- Notes/README: `part4_notes.md` has the technique justification, correctness evidence,
+  machine info, medians/speedups/efficiencies, schedule/tile table, work model,
+  per-scene bottleneck table (measured vs inferred), and follow-ups. `README_part4.md`
+  has the exact build/test/benchmark/workmodel/graph commands.
+- Example images: `part4_images/p4_{sparse,heavy,corner}_512_{reference,baseline,optimized}.png`
+  from `render/run_part4_examples.sh`.
+
+## Next steps
+
+1. Final verification: rebuild, rerun the demo and the Part 4 tests from the committed
+   tree, confirm timing files are consistent with the notes.
+2. `make clean` + remove `render/.part4_build`, root PPMs and `part4_images/`; keep the
+   `part4_*` report artifacts and the code changes.
+3. Commit the Part 4 work and produce the final summary.
+

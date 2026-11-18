@@ -1,0 +1,10 @@
+# Part 4 work model, 1024x1024, tile 16
+# baseline tests = width*height*Nc; candidate tests = width*height*c_avg
+# blends = circle/pixel pairs that actually pass covers()
+scene         Nc      tiles    entries     c_avg      t_avg   base_tests   cand_tests test_red    blends
+p4_sparse   2000       4096       5781     1.411      2.890   2097152000      1479936  1417.1x    113465
+p4_heavy     400       4096     485786   118.600   1214.465    419430400    124361216     3.4x  97963005
+p4_corner    760       4096       5690     1.389      7.487    796917760      1456640   547.1x    373420
+p4_few         8       4096       5616     1.371    702.000      8388608      1437696     5.8x   1033463
+p4_one         1       4096       4096     1.000   4096.000      1048576      1048576     1.0x   1048356
+p4_huge       32       4096     131072    32.000   4096.000     33554432     33554432     1.0x  33162957

@@ -29,6 +29,37 @@ Image render_parallel(int width,int height,const std::vector<Circle>& circles);
 // tests that cannot change the result.
 Image render_optimized(int width,int height,const std::vector<Circle>& circles);
 
+// Part 4 diagnostics. Runtime schedule selector for schedule(runtime).
+// Runtime leaves the current OpenMP runtime schedule untouched, so OMP_SCHEDULE
+// still works for the starter demo/benchmark.
+enum class RenderSchedule {Runtime=-1,Static=0,Dynamic=1,Guided=2,Auto=3};
+
+// Optional measurements filled by render_parallel_optimized. Preprocessing
+// covers image allocation, circle boxes and candidate-list construction;
+// render_ms covers the tile loop. Their sum is the total renderer time.
+struct RenderStats {
+    int tile_size=0;
+    long long tile_count=0;
+    long long candidate_entries=0;
+    long long min_candidates=0;
+    long long max_candidates=0;
+    double preprocess_ms=0.0;
+    double render_ms=0.0;
+    // When collect_thread_times is true, these are filled per worker thread
+    // with the time spent inside tiles (busy) and the whole loop span.
+    bool collect_thread_times=false;
+    std::vector<double> thread_busy_ms;
+    std::vector<double> thread_span_ms;
+};
+
+// Part 4 optimized renderer with explicit configuration. This is an additive
+// declaration; the starter signatures above are unchanged. tile_size <= 0
+// selects the default (16). chunk_size <= 0 leaves the kind's default chunk.
+// Pass stats = nullptr when no measurements are needed.
+Image render_parallel_optimized(int width,int height,const std::vector<Circle>& circles,
+                                int tile_size,RenderSchedule schedule,int chunk_size,
+                                RenderStats* stats=nullptr);
+
 // True when the images have the same size and every color component differs by
 // at most the tolerance.
 bool images_close(const Image& a,const Image& b,float tolerance=0.0001f);

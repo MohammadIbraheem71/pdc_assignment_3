@@ -1,0 +1,90 @@
+# Part 4 schedule/tile sweep
+# compiler 15.2.0, OpenMP macro 201511, processors 20
+# size 1024x1024, 5 timed runs after one warm-up, 8 threads, median ms
+# every configuration is compared with the reference before timing
+
+## scene p4_corner: 760 circles, 1024x1024
+tile  schedule     chunk    median_ms       min_ms       max_ms      pre_ms   render_ms    tiles    c_avg
+8     static           0       7.9334       7.6188       8.1125      1.0154      6.6370    16384    0.928
+8     dynamic,1        1       3.1587       3.0879       3.2672      0.9931      2.1647    16384    0.928
+8     dynamic,4        4       2.4015       2.3994       2.4076      0.9627      1.4411    16384    0.928
+8     dynamic,16      16       2.2529       2.2440       2.4073      1.0116      1.2401    16384    0.928
+8     guided,4         4       7.6066       7.2552       8.2056      1.0173      6.4257    16384    0.928
+16    static           0       9.7236       9.5247      11.6085      1.9416      7.7761     4096    1.389
+16    dynamic,1        1       3.6492       2.8395       4.3766      1.1087      2.4275     4096    1.389
+16    dynamic,4        4       2.6730       2.6546       2.9429      0.9485      1.7316     4096    1.389
+16    dynamic,16      16       2.9735       2.5968       3.2230      0.9557      1.9384     4096    1.389
+16    guided,4         4       8.3333       8.2254       8.8523      0.9862      7.3031     4096    1.389
+32    static           0      10.2885       9.8765      11.0038      1.0078      9.1737     1024    2.635
+32    dynamic,1        1       3.6673       3.4142       3.9146      1.0164      2.5938     1024    2.635
+32    dynamic,4        4       5.7178       4.9990       6.6156      0.9158      4.5699     1024    2.635
+32    dynamic,16      16       4.8206       4.7142       5.0190      0.9081      3.8570     1024    2.635
+32    guided,4         4      13.2780      11.8875      13.5923      1.3882     12.1421     1024    2.635
+64    static           0      19.1237      18.5494      19.8460      1.7119     17.5168      256    6.258
+64    dynamic,1        1      11.0801       8.1614      12.4489      1.6075      9.6116      256    6.258
+64    dynamic,4        4      11.2827      10.6951      14.3578      1.0400     10.2613      256    6.258
+64    dynamic,16      16      19.1681      13.6440      24.9745      1.3057     17.4640      256    6.258
+64    guided,4         4      33.2014      28.5773      39.2625      2.2102     31.0291      256    6.258
+# best p4_corner: tile=8 dynamic,16 at 2.2529 ms
+# busy p4_corner tile=16 static p=8: busy mean=2.577 max=12.522 max/mean=4.86 | span mean=12.611 max=12.637 max/mean=1.00 | idle=79.6%
+#   thread 0 busy_ms=2.075 span_ms=12.634
+#   thread 1 busy_ms=12.522 span_ms=12.577
+#   thread 2 busy_ms=1.110 span_ms=12.599
+#   thread 3 busy_ms=0.889 span_ms=12.599
+#   thread 4 busy_ms=1.005 span_ms=12.596
+#   thread 5 busy_ms=0.851 span_ms=12.621
+#   thread 6 busy_ms=1.356 span_ms=12.637
+#   thread 7 busy_ms=0.811 span_ms=12.621
+# busy p4_corner tile=16 dynamic,4 p=8: busy mean=2.844 max=2.859 max/mean=1.01 | span mean=2.902 max=2.904 max/mean=1.00 | idle=2.0%
+#   thread 0 busy_ms=2.859 span_ms=2.901
+#   thread 1 busy_ms=2.837 span_ms=2.902
+#   thread 2 busy_ms=2.828 span_ms=2.902
+#   thread 3 busy_ms=2.842 span_ms=2.904
+#   thread 4 busy_ms=2.832 span_ms=2.902
+#   thread 5 busy_ms=2.850 span_ms=2.902
+#   thread 6 busy_ms=2.849 span_ms=2.902
+#   thread 7 busy_ms=2.852 span_ms=2.902
+
+## scene p4_heavy: 400 circles, 1024x1024
+tile  schedule     chunk    median_ms       min_ms       max_ms      pre_ms   render_ms    tiles    c_avg
+8     static           0     151.4266     143.4734     185.0128     37.7465    113.6249    16384  116.162
+8     dynamic,1        1     117.1577     116.5452     120.3121     37.7322     79.4221    16384  116.162
+8     dynamic,4        4     117.6034     114.8386     124.5286     37.4617     78.3306    16384  116.162
+8     dynamic,16      16     117.9285     114.8243     119.7616     37.5304     80.4956    16384  116.162
+8     guided,4         4     115.7801     113.4096     121.2168     37.6574     78.0825    16384  116.162
+16    static           0     105.1435     104.7097     117.1600      6.8744     98.0957     4096  118.600
+16    dynamic,1        1      84.3740      82.2900      97.8298      6.6431     77.5230     4096  118.600
+16    dynamic,4        4      83.5326      83.3261      83.9873      6.8204     76.8175     4096  118.600
+16    dynamic,16      16      84.2304      82.8426      91.5973      6.6765     77.2036     4096  118.600
+16    guided,4         4      83.6210      82.8537      84.6471      6.6584     77.0396     4096  118.600
+32    static           0     111.3726     106.1397     121.4909      2.4817    109.0146     1024  123.616
+32    dynamic,1        1      79.8621      78.4279      80.5794      2.3387     77.6801     1024  123.616
+32    dynamic,4        4      80.1604      79.8346      80.7205      2.4055     77.6835     1024  123.616
+32    dynamic,16      16      82.2117      80.3683      84.2433      2.3179     80.0778     1024  123.616
+32    guided,4         4      78.2704      77.9748      78.6356      2.1927     76.0190     1024  123.616
+64    static           0     105.2493     104.7595     127.2673      1.7147    103.5785      256  133.809
+64    dynamic,1        1      81.6914      81.3903      82.3842      1.5949     80.1088      256  133.809
+64    dynamic,4        4      84.1306      81.7314      97.7197      1.6217     82.5048      256  133.809
+64    dynamic,16      16      87.3059      85.1901      87.7456      1.6431     85.4128      256  133.809
+64    guided,4         4      87.2645      84.8264      96.0251      1.9051     85.3993      256  133.809
+# best p4_heavy: tile=32 guided,4 at 78.2704 ms
+# busy p4_heavy tile=16 static p=8: busy mean=77.330 max=102.778 max/mean=1.33 | span mean=102.855 max=102.899 max/mean=1.00 | idle=24.8%
+#   thread 0 busy_ms=53.876 span_ms=102.899
+#   thread 1 busy_ms=83.300 span_ms=102.858
+#   thread 2 busy_ms=92.046 span_ms=102.856
+#   thread 3 busy_ms=102.778 span_ms=102.810
+#   thread 4 busy_ms=93.880 span_ms=102.849
+#   thread 5 busy_ms=82.451 span_ms=102.855
+#   thread 6 busy_ms=65.322 span_ms=102.848
+#   thread 7 busy_ms=44.986 span_ms=102.866
+# busy p4_heavy tile=16 dynamic,4 p=8: busy mean=77.953 max=77.991 max/mean=1.00 | span mean=78.033 max=78.077 max/mean=1.00 | idle=0.1%
+#   thread 0 busy_ms=77.914 span_ms=78.077
+#   thread 1 busy_ms=77.977 span_ms=78.029
+#   thread 2 busy_ms=77.981 span_ms=78.028
+#   thread 3 busy_ms=77.991 span_ms=78.030
+#   thread 4 busy_ms=77.922 span_ms=78.029
+#   thread 5 busy_ms=77.974 span_ms=78.028
+#   thread 6 busy_ms=77.923 span_ms=78.036
+#   thread 7 busy_ms=77.944 span_ms=78.009
+
+wrote part4_sweep.csv (40 rows) and part4_sweep_busy.csv (32 rows)
