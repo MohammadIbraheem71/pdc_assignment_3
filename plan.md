@@ -674,9 +674,105 @@ data, graphs, and a work-model comparison.
 
 ## Next steps
 
-1. Final verification: rebuild, rerun the demo and the Part 4 tests from the committed
+1. [x] Final verification: rebuild, rerun the demo and the Part 4 tests from the committed
    tree, confirm timing files are consistent with the notes.
-2. `make clean` + remove `render/.part4_build`, root PPMs and `part4_images/`; keep the
+2. [x] `make clean` + remove `render/.part4_build`, root PPMs and `part4_images/`; keep the
    `part4_*` report artifacts and the code changes.
-3. Commit the Part 4 work and produce the final summary.
+3. [x] Commit the Part 4 work and produce the final summary. Commit `69100c1`.
+
+---
+
+# Part 5: MPI Collectives and Communication-Cost Reasoning
+
+## Goal
+
+No MPI code is required. Design the MPI data flow for the tiled renderer, derive and
+evaluate broadcast costs under `T(m) = alpha + beta*m`, compare ring/2D-mesh/hypercube
+broadcast step counts for p = 16, and analyse load balance for a skewed tile-time set on
+8 processes. Everything is analytical and lives in a new `part5/` folder; `saxpy/`,
+`scan/` and `render/` must not change. `verify_part5.py` is the source of truth for every
+number, and two labeled PNG diagrams are produced with a plotting tool.
+
+## Checklist
+
+- [x] Append this Part 5 plan; note available diagram tooling
+- [x] A: write the data-flow design (broadcast metadata + circles, tile ownership, gather,
+  root assembly), with the Scatterv/Gatherv conditions, a concrete `counts[]`/`displs[]`
+  example, the non-contiguity choice, full-circle vs overlap-only recommendation, and
+  data-size estimates
+- [x] A: draw the data-flow diagram PNG
+- [x] B: derive `T_linear` and `T_binomial`, assumptions, p = 8 round-by-round table, and
+  the large-message note
+- [x] C: compute the p = 8, m = 2^20, alpha = 10 us, beta = 1 ns/B numbers with units
+- [x] D: ring / 4x4 mesh / Q4 step counts with assumptions and derivation table
+- [x] D: draw the topology PNG with the broadcast steps marked
+- [x] E: compute the [2,2,3,3,3,4,5,18] ms load-balance numbers, lower bounds, speedup,
+  efficiency and idle time
+- [x] E: choose one change, run an LPT simulation for the split 18 ms tile, print the
+  assignment, compare compute saved with the extra communication cost
+- [x] Write `verify_part5.py`, run it, save `part5_output.txt`
+- [x] Write `part5_notes.md` with every formula and intermediate step
+- [x] Write `part5/README_part5.md` with the regeneration commands
+- [x] Final verification: rerun the script, confirm diagrams, `git status` shows only
+  `part5/` and `plan.md`, produce the summary
+
+## Decisions
+
+- **Diagram tooling:** matplotlib and graphviz are not installed (`import matplotlib`
+  fails, `dot` is absent); Pillow 12.1.1 is available, so both diagrams are drawn with
+  Pillow using explicit geometry (as in Parts 1-4). This is recorded here per the task
+  rules.
+- All statements are **model-based**; nothing is measured. Assumptions are stated next to
+  each formula (single-port, contention-free links, no pipelining, store-and-forward
+  step counting, tile cost divides evenly among sub-tiles).
+- `verify_part5.py` recomputes and asserts every number and prints a structured report;
+  `part5_output.txt` is its captured output.
+- Recommended load-balancing change: over-decompose the 18 ms tile into four 4.5 ms
+  pieces and assign with LPT (largest processing time first), then verify the makespan by
+  simulation.
+- Data-size assumptions: circle record = 7 float32 fields = 28 bytes; final image RGBA
+  float32 = 16 bytes/pixel (16 MiB at 1024x1024); 16x16 tile = 4096 bytes; the task-E
+  tile payload is 32x32 RGBA float32 = 16,384 bytes.
+
+## Findings / Results
+
+- Plan appended; tooling checked: matplotlib and graphviz are absent, Pillow 12.1.1 is
+  available (diagrams will use Pillow).
+- `part5/verify_part5.py` written and run: 57 numeric checks, all OK; output saved to
+  `part5/part5_output.txt`.
+- A (sizes): circle record 28 B (11,200 B at Nc=400; 56,000 B at Nc=2000); 1024x1024 RGBA
+  float32 image = 16,777,216 B (16 MiB); 16x16 tile = 4,096 B; 4,096 tiles at p=8 = 512
+  per rank; 32x32 tile = 16,384 B. Scatterv example 1050x1050/16 -> 66x66 = 4,356 tiles:
+  `counts=[545,545,545,545,544,544,544,544]`,
+  `displs=[0,545,1090,1635,2180,2724,3268,3812]`; edge tiles are 10 px wide/tall.
+- Diagrams: `part5/part5_dataflow.png` (broadcast -> render -> Gatherv -> reassemble, with
+  the Scatterv/Gatherv example) and `part5/part5_topologies.png` (ring, 4x4 mesh, Q4 with
+  per-node steps and color-coded rounds). Both drawn with Pillow
+  (`part5/draw_part5_diagrams.py`); matplotlib and graphviz are absent.
+- B/C: `T(msg)=1058.576 us`; linear (7 messages) = 7,410.032 us = 7.410032 ms;
+  binomial (3 rounds) = 3,175.728 us = 3.175728 ms; ratio 7/3 = 2.3333; binomial saves
+  4,234.304 us, of which only 40 us (0.94%) is latency and 4,194.304 us is bandwidth.
+  `beta*m` is 99.06% of one message, so this case is bandwidth-dominated.
+- D: ring unidirectional 15 steps, bidirectional 8; 4x4 mesh root at corner 6, at centre 4;
+  4x4 torus 4; Q4 hypercube 4. With `T(msg)=1058.576 us`: ring bidi 8,468.608 us, mesh
+  corner 6,351.456 us, torus/Q4 4,234.304 us.
+- E: total 40 ms, average bound 5 ms, indivisible bound max(5,18)=18 ms; one tile per rank
+  makespan 18 ms, speedup 2.2222x, efficiency 27.7778%, idle 104 process-ms. Splitting the
+  18 ms tile into four 4.5 ms pieces and LPT gives loads `[5,4.5,4.5,4.5,4.5,6,6,5]`,
+  makespan 6 ms, speedup 6.6667x, efficiency 83.3333%, 12 ms saved; the 6 ms makespan is
+  optimal for this split (a sub-6 ms packing is impossible). Per-tile queue cost for
+  11 tiles (32x32 RGBA, 16 KiB) = 400.4 us, so net gain ~11.60 ms; one batch Gatherv costs
+  ~210.224 us; break-even 329.67 per-tile messages.
+- `part5/part5_notes.md` and `part5/README_part5.md` written. The notes contain the full
+  A-E answers, all intermediate formulas, assumptions, the measured-vs-model distinction
+  (nothing measured) and the recommended change. The README has the exact regeneration
+  commands and output file names.
+
+## Next steps
+
+1. [x] Final verification: rerun `verify_part5.py`, confirm both PNGs, check `git status`
+   shows only `part5/` and `plan.md`, and produce the final summary.
+2. [ ] Manual follow-up (student): paste the diagrams into the PDF report and rewrite the
+   calculations in your own words; the analysis files are ready and no code changes are
+   needed.
 
